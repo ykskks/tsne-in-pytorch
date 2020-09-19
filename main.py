@@ -20,6 +20,7 @@ def plot_result(x_transformed, y, title):
         ax.scatter(x_transformed[y == int(label), 0], x_transformed[y == int(label), 1], color=c, label=label)
         ax.legend()
         ax.set_title(title, fontsize=16)
+    plt.show()
 
 
 class SNE:
@@ -102,6 +103,7 @@ class SNE:
         plt.plot(loss_history)
         plt.xlabel("epoch")
         plt.ylabel("loss")
+        plt.show()
         return y.detach().numpy()
 
 
