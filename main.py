@@ -33,7 +33,7 @@ class SNE:
     def _compute_perplexity_from_sigma(self, data_matrix, center_idx, sigma):
         similarities = self._similarity(data_matrix[center_idx, :], data_matrix, sigma, "h")
         p = similarities / similarities.sum()
-        shannon = - (p[p != 0] * torch.log2(p[p != 0])).sum()  #ゼロがlogとるとnanになるので省く
+        shannon = - (p[p != 0] * torch.log2(p[p != 0])).sum()  # log(0)回避
         perp = 2 ** shannon.item()
         return perp
 
@@ -91,7 +91,7 @@ class SNE:
             y_similarities = self._compute_similarity(y, torch.ones(self.N) / (2 ** (1/2)), "l")
             q = self._compute_cond_prob(y_similarities, "l")
 
-            kl_loss = (p[p != 0] * (p[p != 0] / q[p != 0]).log()).mean()  # 対角成分のゼロがlogとるとnanになる
+            kl_loss = (p[p != 0] * (p[p != 0] / q[p != 0]).log()).mean()  # log(0)回避
             kl_loss.backward()
             loss_history.append(kl_loss.item())
             optimizer.step()
