@@ -31,12 +31,8 @@ class SNE:
         self.n_epochs = n_epochs
 
     def _compute_perplexity_from_sigma(self, data_matrix, center_idx, sigma):
-        similarities = torch.zeros(self.N)
-        for i in range(self.N):
-            similarities[i] = self._similarity(data_matrix[center_idx, :], data_matrix[i, :], sigma, "h")
-        p = torch.zeros(self.N)
-        for i in range(self.N):
-            p[i] = similarities[i] / similarities.sum()
+        similarities = self._similarity(data_matrix[center_idx, :], data_matrix, sigma, "h")
+        p = similarities / similarities.sum()
         shannon = - (p[p != 0] * torch.log2(p[p != 0])).sum()  #ゼロがlogとるとnanになるので省く
         perp = 2 ** shannon.item()
         return perp
@@ -56,21 +52,21 @@ class SNE:
 
     def _similarity(self, x1, x2, sigma, mode):
         # SNEでは高次元でも低次元でも正規分布を用いる
-        return torch.exp(- ((x1 - x2) ** 2).sum() / 2 * (sigma ** 2))
+        return torch.exp(- ((x1 - x2) ** 2).sum(dim=1) / 2 * (sigma ** 2))
 
     def _compute_similarity(self, data_matrix, sigmas, mode):
         similarities = torch.zeros((self.N, self.N))
-        for i, j in product(range(self.N), range(self.N)):
-            g_ji = self._similarity(data_matrix[i, :], data_matrix[j, :], sigmas[i], mode)
-            similarities[i][j] = g_ji
+        for i in range(self.N):
+            s_i = self._similarity(data_matrix[i, :], data_matrix, sigmas[i], mode)
+            similarities[i] = s_i
         return similarities
 
     def _compute_cond_prob(self, similarities, mode):
         # SNEではmodeにより類似性の計算変わらない
         cond_prob_matrix = torch.zeros((self.N, self.N))
-        for i, j in product(range(self.N), range(self.N)):
-            p_ji = similarities[i][j] / similarities[i].sum()
-            cond_prob_matrix[i][j] = p_ji
+        for i in range(self.N):
+            p_i = similarities[i] / similarities[i].sum()
+            cond_prob_matrix[i] = p_i
         return cond_prob_matrix
 
     def fit_transform(self, X):
@@ -95,7 +91,7 @@ class SNE:
             y_similarities = self._compute_similarity(y, torch.ones(self.N) / (2 ** (1/2)), "l")
             q = self._compute_cond_prob(y_similarities, "l")
 
-            kl_loss = (p[p != 0] * (p[p != 0] / q[p != 0]).log()).sum()  # 対角成分のゼロがlogとるとnanになる
+            kl_loss = (p[p != 0] * (p[p != 0] / q[p != 0]).log()).mean()  # 対角成分のゼロがlogとるとnanになる
             kl_loss.backward()
             loss_history.append(kl_loss.item())
             optimizer.step()
@@ -103,22 +99,21 @@ class SNE:
         plt.plot(loss_history)
         plt.xlabel("epoch")
         plt.ylabel("loss")
-        plt.show()
         return y.detach().numpy()
 
 
 class TSNE(SNE):
     def _similarity(self, x1, x2, sigma, mode):
         if mode == "h":
-            return torch.exp(- ((x1 - x2) ** 2).sum() / 2 * (sigma ** 2))
+            return torch.exp(- ((x1 - x2) ** 2).sum(dim=1) / 2 * (sigma ** 2))
         if mode == "l":
-            return (1 + ((x1 - x2) ** 2).sum()) ** (-1)
+            return (1 + ((x1 - x2) ** 2).sum(dim=1)) ** (-1)
 
     def _compute_cond_prob(self, similarities, mode):
         cond_prob_matrix = torch.zeros((self.N, self.N))
-        for i, j in product(range(self.N), range(self.N)):
-            p_ji = similarities[i][j] / similarities[i].sum()
-            cond_prob_matrix[i][j] = p_ji
+        for i in range(self.N):
+            p_i = similarities[i] / similarities[i].mean()
+            cond_prob_matrix[i] = p_i
 
         if mode == "h":
             cond_prob_matrix = (cond_prob_matrix + torch.t(cond_prob_matrix)) / 2
@@ -128,7 +123,7 @@ class TSNE(SNE):
 if __name__ == "__main__":
     digits = load_digits()
     # only use top 100 samples for faster computation
-    X, y = digits.data[:100, :], digits.target[:100]
+    X, y = digits.data[:200, :], digits.target[:200]
 
     sc = StandardScaler()
     X_sc = sc.fit_transform(X)
@@ -137,10 +132,10 @@ if __name__ == "__main__":
     X_pca = pca.fit_transform(X_sc)
     plot_result(X_pca, y, "PCA")
 
-    sne = SNE(n_components=2, perplexity=50, n_epochs=100, lr=1)
+    sne = SNE(n_components=2, perplexity=50, n_epochs=200, lr=0.1)
     X_sne = sne.fit_transform(X_sc)
     plot_result(X_sne, y, "SNE")
 
-    tsne = TSNE(n_components=2, perplexity=50, n_epochs=200, lr=1)
+    tsne = TSNE(n_components=2, perplexity=50, n_epochs=500, lr=0.1)
     X_tsne = tsne.fit_transform(X_sc)
     plot_result(X_tsne, y, "t-SNE")
