@@ -1,1 +1,1 @@
-# tsne-in-pytorch
+# t-SNE in PyTorch
